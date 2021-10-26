@@ -110,7 +110,7 @@ contract RouterStrategy is BaseStrategy {
         return strategyName;
     }
 
-    function estimatedTotalAssets() public view override returns (uint256) {
+    function estimatedTotalAssets() public view virtual override returns (uint256) {
         return balanceOfWant().add(valueOfInvestment());
     }
 
@@ -159,7 +159,7 @@ contract RouterStrategy is BaseStrategy {
         }
     }
 
-    function adjustPosition(uint256 _debtOutstanding) internal override {
+    function adjustPosition(uint256 _debtOutstanding) internal virtual override {
         if (emergencyExit) {
             return;
         }
@@ -173,6 +173,7 @@ contract RouterStrategy is BaseStrategy {
 
     function liquidatePosition(uint256 _amountNeeded)
         internal
+        virtual
         override
         returns (uint256 _liquidatedAmount, uint256 _loss)
     {
@@ -212,6 +213,7 @@ contract RouterStrategy is BaseStrategy {
     function liquidateAllPositions()
         internal
         override
+        virtual
         returns (uint256 _amountFreed)
     {
         return

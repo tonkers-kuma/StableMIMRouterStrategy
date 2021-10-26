@@ -18,7 +18,7 @@ compiler:
     remappings:
       - "@yearnvaults=yearn/yearn-vaults@0.4.3"
       - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.1.0"
-
+      
 reports:
   exclude_contracts:
     - SafeMath

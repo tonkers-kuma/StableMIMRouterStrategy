@@ -46,58 +46,45 @@ def strategist(accounts):
 def keeper(accounts):
     yield accounts[5]
 
-
-@pytest.fixture
-def yvweth_032():
-    yield Contract("0xa9fE4601811213c340e850ea305481afF02f5b28")
-
-
-@pytest.fixture
-def yvweth_042():
-    yield Contract("0xa258C4606Ca8206D8aA700cE2143D7db854D168c")
-
-
-@pytest.fixture
-def origin_vault():
-    # origin vault of the route
-    yield Contract("0xa9fE4601811213c340e850ea305481afF02f5b28")
-
-
-@pytest.fixture
-def destination_vault():
-    # destination vault of the route
-    yield Contract("0xa258C4606Ca8206D8aA700cE2143D7db854D168c")
-
-
-@pytest.fixture
-def origin_vault():
-    # origin vault of the route
-    yield Contract("0xa9fE4601811213c340e850ea305481afF02f5b28")
-
-
-@pytest.fixture
-def destination_vault():
-    # destination vault of the route
-    yield Contract("0xa258C4606Ca8206D8aA700cE2143D7db854D168c")
-
-
 @pytest.fixture
 def weth_whale(accounts):
     yield accounts.at("0xc1aae9d18bbe386b102435a8632c8063d31e747c", True)
 
+@pytest.fixture
+def mim_whale(accounts):
+    yield accounts.at("0x5a6a4d54456819380173272a5e8e9b9904bdf41b", True)
+
+@pytest.fixture
+def yvusdc_whale(accounts):
+    yield accounts.at("0x5934807cc0654d46755ebd2848840b616256c6ef", True)
+
+@pytest.fixture
+def destination_vault(pm, gov, rewards, guardian, management, mim):
+    Vault = pm(config["dependencies"][0]).Vault
+    vault = guardian.deploy(Vault)
+    vault.initialize(mim, gov, rewards, "", "", guardian, management)
+    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
+    vault.setManagement(management, {"from": gov})
+    yield vault
+    #yield Contract("0x9d409a0A012CFbA9B15F6D4B36Ac57A46966Ab9a")
+
 
 @pytest.fixture
 def token():
-    token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"  # this should be the address of the ERC-20 used by the strategy/vault (DAI)
+    token_address = "0x5f18c75abdae578b483e5f43f12a39cf75b973a9" # yvusdc
     yield Contract(token_address)
 
+@pytest.fixture
+def mim():
+    token_address = "0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3"
+    yield Contract(token_address)
 
 @pytest.fixture
 def amount(accounts, token, user):
     amount = 10_000 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
-    reserve = accounts.at("0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643", force=True)
+    reserve = accounts.at("0x5934807cc0654d46755ebd2848840b616256c6ef", force=True)
     token.transfer(user, amount, {"from": reserve})
     yield amount
 
@@ -127,58 +114,32 @@ def vault(pm, gov, rewards, guardian, management, token):
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
     vault.setManagement(management, {"from": gov})
     yield vault
-    yield Contract("0xa9fE4601811213c340e850ea305481afF02f5b28")
 
 
 @pytest.fixture
 def strategy(
     strategist,
     keeper,
-    origin_vault,
-    destination_vault,
-    RouterStrategy,
+    vault,
+    StableMIMRouterStrategy,
     gov,
     health_check,
+    destination_vault
 ):
     strategy = strategist.deploy(
-        RouterStrategy, origin_vault, destination_vault, "Route yvWETH 042"
+        StableMIMRouterStrategy, vault, destination_vault, "yvUSDC-MIM-Minter", "0x6cbAFEE1FaB76cA5B5e144c43B3B50d42b7C8c8f"
     )
     strategy.setKeeper(keeper)
 
     for i in range(0, 20):
-        strat_address = origin_vault.withdrawalQueue(i)
+        strat_address = vault.withdrawalQueue(i)
         if ZERO_ADDRESS == strat_address:
             break
 
-        origin_vault.updateStrategyDebtRatio(strat_address, 0, {"from": gov})
+        vault.updateStrategyDebtRatio(strat_address, 0, {"from": gov})
 
-    strategy.setHealthCheck(health_check, {"from": origin_vault.governance()})
-    origin_vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
-
-    yield strategy
-
-
-@pytest.fixture
-def unique_strategy(
-    strategist, keeper, yvweth_032, yvweth_042, RouterStrategy, gov, health_check
-):
-    strategy = strategist.deploy(
-        RouterStrategy, yvweth_032, yvweth_042, "Route yvWETH 042"
-    )
-    strategy.setKeeper(keeper)
-    strategy.setHealthCheck(health_check, {"from": yvweth_032.governance()})
-
-    for i in range(0, 20):
-        strat_address = yvweth_032.withdrawalQueue(i)
-        if ZERO_ADDRESS == strat_address:
-            break
-
-        yvweth_032.updateStrategyDebtRatio(strat_address, 0, {"from": gov})
-
-    yvweth_032.setPerformanceFee(0, {"from": gov})
-    yvweth_032.setManagementFee(0, {"from": gov})
-    yvweth_032.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
-    yvweth_032.setDepositLimit(0, {"from": gov})
+    strategy.setHealthCheck(health_check, {"from": gov})
+    vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
 
     yield strategy
 
