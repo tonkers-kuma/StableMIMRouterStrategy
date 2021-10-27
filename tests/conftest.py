@@ -59,6 +59,10 @@ def yvusdc_whale(accounts):
     yield accounts.at("0x5934807cc0654d46755ebd2848840b616256c6ef", True)
 
 @pytest.fixture
+def yvcrvseth_whale(accounts):
+    yield accounts.at("0xf5bce5077908a1b7370b9ae04adc565ebd643966", True)
+
+@pytest.fixture
 def destination_vault(pm, gov, rewards, guardian, management, mim):
     Vault = pm(config["dependencies"][0]).Vault
     vault = guardian.deploy(Vault)
@@ -68,10 +72,19 @@ def destination_vault(pm, gov, rewards, guardian, management, mim):
     yield vault
     #yield Contract("0x9d409a0A012CFbA9B15F6D4B36Ac57A46966Ab9a")
 
-
 @pytest.fixture
 def token():
+    token_address = "0xdCD90C7f6324cfa40d7169ef80b12031770B4325" # yvcrvseth
+    yield Contract(token_address)
+
+@pytest.fixture
+def yvusdc():
     token_address = "0x5f18c75abdae578b483e5f43f12a39cf75b973a9" # yvusdc
+    yield Contract(token_address)
+
+@pytest.fixture
+def yvcrvseth():
+    token_address = "0xdCD90C7f6324cfa40d7169ef80b12031770B4325" # yvcrvseth
     yield Contract(token_address)
 
 @pytest.fixture
@@ -121,13 +134,14 @@ def strategy(
     strategist,
     keeper,
     vault,
-    StableMIMRouterStrategy,
+    MIMMinterRouterStrategy,
     gov,
     health_check,
     destination_vault
 ):
     strategy = strategist.deploy(
-        StableMIMRouterStrategy, vault, destination_vault, "yvUSDC-MIM-Minter", "0x6cbAFEE1FaB76cA5B5e144c43B3B50d42b7C8c8f"
+        MIMMinterRouterStrategy, vault, destination_vault, "yvcrvseth-MIM-Minter",
+        "0x0BCa8ebcB26502b013493Bf8fE53aA2B1ED401C1", 75_000, 65_000
     )
     strategy.setKeeper(keeper)
 
