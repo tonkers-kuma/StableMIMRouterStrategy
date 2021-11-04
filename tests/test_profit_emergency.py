@@ -2,25 +2,23 @@ import pytest
 from brownie import Contract, ZERO_ADDRESS, Wei, chain, reverts
 
 DUST_THRESHOLD = 10_000
-def test_profit_emergency(strategy, mim, gov, mim_whale, yvcrvseth_whale, yvcrvseth, vault, destination_vault):
+def test_profit_emergency(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, abracadabra):
     vault_token = Contract(vault.token())
 
-    steth = Contract("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84")
-    abracadabra = Contract("0x0BCa8ebcB26502b013493Bf8fE53aA2B1ED401C1")
     bb = Contract(abracadabra.bentoBox())
 
-    initial_amount = 100*(10**yvcrvseth.decimals())
+    initial_amount = 100*(10**yvcrvsteth.decimals())
     CollateralRatio = 0.65
     # check that address has more than 100 yvusdc
-    assert yvcrvseth.balanceOf(yvcrvseth_whale) > 100 * (10 ** yvcrvseth.decimals())
+    assert yvcrvsteth.balanceOf(yvcrvsteth_whale) > 100 * (10 ** yvcrvsteth.decimals())
 
-    vault_token.approve(vault, 2 ** 256 - 1, {"from":yvcrvseth_whale})
+    vault_token.approve(vault, 2 ** 256 - 1, {"from":yvcrvsteth_whale})
     assert destination_vault.totalAssets() == 0
 
     #we need to add money to abra
     mim.approve(bb, 2**256-1, {"from":mim_whale})
     bb.deposit(mim, mim_whale, abracadabra, 1_000_000*(10**mim.decimals()), 0, {"from":mim_whale})
-    vault.deposit(initial_amount/(yvcrvseth.pricePerShare()/(10**yvcrvseth.decimals())), {'from': yvcrvseth_whale})
+    vault.deposit(initial_amount/(yvcrvsteth.pricePerShare()/(10**yvcrvsteth.decimals())), {'from': yvcrvsteth_whale})
 
     assert mim.balanceOf(strategy) == 0
 

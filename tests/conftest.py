@@ -59,7 +59,7 @@ def yvusdc_whale(accounts):
     yield accounts.at("0x5934807cc0654d46755ebd2848840b616256c6ef", True)
 
 @pytest.fixture
-def yvcrvseth_whale(accounts):
+def yvcrvsteth_whale(accounts):
     yield accounts.at("0xf5bce5077908a1b7370b9ae04adc565ebd643966", True)
 
 @pytest.fixture
@@ -74,7 +74,7 @@ def destination_vault(pm, gov, rewards, guardian, management, mim):
 
 @pytest.fixture
 def token():
-    token_address = "0xdCD90C7f6324cfa40d7169ef80b12031770B4325" # yvcrvseth
+    token_address = "0xdCD90C7f6324cfa40d7169ef80b12031770B4325" # yvcrvsteth
     yield Contract(token_address)
 
 @pytest.fixture
@@ -83,8 +83,8 @@ def yvusdc():
     yield Contract(token_address)
 
 @pytest.fixture
-def yvcrvseth():
-    token_address = "0xdCD90C7f6324cfa40d7169ef80b12031770B4325" # yvcrvseth
+def yvcrvsteth():
+    token_address = "0xdCD90C7f6324cfa40d7169ef80b12031770B4325" # yvcrvsteth
     yield Contract(token_address)
 
 @pytest.fixture
@@ -101,6 +101,9 @@ def amount(accounts, token, user):
     token.transfer(user, amount, {"from": reserve})
     yield amount
 
+@pytest.fixture
+def abracadabra():
+    yield Contract("0x0BCa8ebcB26502b013493Bf8fE53aA2B1ED401C1")
 
 @pytest.fixture
 def weth():
@@ -137,11 +140,12 @@ def strategy(
     MIMMinterRouterStrategy,
     gov,
     health_check,
-    destination_vault
+    destination_vault,
+    abracadabra
 ):
     strategy = strategist.deploy(
-        MIMMinterRouterStrategy, vault, destination_vault, "yvcrvseth-MIM-Minter",
-        "0x0BCa8ebcB26502b013493Bf8fE53aA2B1ED401C1", 75_000, 65_000
+        MIMMinterRouterStrategy, vault, destination_vault, "yvcrvsteth-MIM-Minter",
+        abracadabra, 75_000, 65_000, True
     )
     strategy.setKeeper(keeper)
 
