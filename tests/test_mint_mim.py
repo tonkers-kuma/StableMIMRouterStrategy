@@ -38,7 +38,7 @@ def test_mint_mim(strategy, mim, gov, mim_whale, yvcrvseth_whale, yvcrvseth, vau
     #we need to add money to abra
 
     mim.approve(bb, 2**256-1, {"from":mim_whale})
-    bb.deposit(mim, mim_whale, abracadabra, 100_000*1e18, 0, {"from":mim_whale})
+    bb.deposit(mim, mim_whale, abracadabra, 1_000_000*(10**mim.decimals()), 0, {"from":mim_whale})
     vault.deposit(initial_amount/(yvcrvseth.pricePerShare()/(10**yvcrvseth.decimals())), {'from': yvcrvseth_whale})
 
     assert mim.balanceOf(strategy) == 0
@@ -62,8 +62,10 @@ def test_mint_mim(strategy, mim, gov, mim_whale, yvcrvseth_whale, yvcrvseth, vau
     chain.mine(1)
 
     #produce gains
-    mim.transfer(destination_vault, 100_000*(10**mim.decimals()), {"from": mim_whale})
+    mim.transfer(destination_vault, 2_000*(10**mim.decimals()), {"from": mim_whale})
 
+    print("after producing gains")
+    info(strategy, mim, bb, steth, vault_token, vault, destination_vault)
     assert strategy.balanceOfWant() < DUST_THRESHOLD
     assert strategy.valueOfInvestment() > 0
     assert destination_vault.totalAssets() > 0
@@ -75,7 +77,6 @@ def test_mint_mim(strategy, mim, gov, mim_whale, yvcrvseth_whale, yvcrvseth, vau
     vault.revokeStrategy(strategy, {"from": gov})
 
     tx = strategy.harvest({"from": gov})
-    #assert False
     info(strategy, mim, bb, steth, vault_token, vault, destination_vault)
     print(tx.events['Harvested'])
 
@@ -85,7 +86,6 @@ def test_mint_mim(strategy, mim, gov, mim_whale, yvcrvseth_whale, yvcrvseth, vau
     chain.sleep(360 + 1)
     chain.mine(1)
 
-    assert False
 
     assert vault.strategies(strategy).dict()["totalGain"] == total_gain
     assert vault.strategies(strategy).dict()["totalLoss"] == total_loss

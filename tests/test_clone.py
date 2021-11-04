@@ -1,7 +1,7 @@
 import pytest
 from brownie import chain, Wei, reverts, Contract, ZERO_ADDRESS
 
-
+DUST_THRESHOLD < 10_000
 def move_funds(vault, dest_vault, strategy, gov, weth, weth_whale):
     print(strategy.name())
 

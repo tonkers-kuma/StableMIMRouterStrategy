@@ -65,7 +65,7 @@ interface IBentoBoxV1 {
     ) external returns (uint256 amountOut, uint256 shareOut);
 }
 
-interface IUni {
+interface IRouter {
     function getAmountsOut(uint256 amountIn, address[] calldata path)
         external
         view
@@ -86,7 +86,6 @@ interface IUni {
         address to,
         uint256 deadline
     ) external returns (uint256[] memory amounts);
-
 }
 
 interface IAbracadabra {
@@ -96,21 +95,23 @@ interface IAbracadabra {
     function removeCollateral(address to, uint256 share) external;
     function borrow(address to, uint256 amount) external returns (uint256 part, uint256 share);
     function repay(address to, bool skim, uint256 part) external returns (uint256 amount);
-    function magicInternetMoney() external returns (IERC20 mim);
     function exchangeRate() external view returns (uint256);
     function userBorrowPart(address) external view returns (uint256);
     function userCollateralShare(address) external view returns (uint256);
     function totalBorrow() external view returns (Rebase memory totals);
     function collateral() external view returns (address);
+    function accrue() external;
 }
 
 interface IWETH is IERC20 {
      function withdraw(uint wad) external;
-     //function balanceOf(address) external returns (uint256);
 }
 
 interface ICurveFI {
     function add_liquidity(uint256[2] calldata amounts, uint256 min_mint_amount) external payable returns (uint256);
+    function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns (uint256);
+    function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns (uint256);
+    function coins(uint256 i) external returns (address);
 }
 
 contract MIMMinterRouterStrategy is RouterStrategy {
@@ -118,7 +119,7 @@ contract MIMMinterRouterStrategy is RouterStrategy {
     using Address for address;
     using SafeMath for uint256;
 
-    IERC20 private mim;
+
     IAbracadabra private abracadabra;
     IBentoBoxV1 private bentoBox;
     uint256 public targetCollatRate;
@@ -129,10 +130,13 @@ contract MIMMinterRouterStrategy is RouterStrategy {
     uint256 private constant C_RATE_PRECISION = 1e5;
     uint256 private constant EXCHANGE_RATE_PRECISION = 1e18;
     uint256 private constant DUST_THRESHOLD = 10_000;
-    IERC20 public constant weth = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 public constant steth = IERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
-    address public constant uniswapRouter =
-        0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    IWETH public constant weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC20 private constant dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    IERC20 private constant mim = IERC20(0x99D8a9C45b2ecA8864373A26D1459e3Dff1e17F3);
+    IRouter public constant uniswapRouter =
+        IRouter(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    ICurveFI private constant crvMIM = ICurveFI(0x5a6A4D54456819380173272A5E8E9B9904BdF41B);
+
     ICurveFI private constant crvSTETH = ICurveFI(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
 
 
@@ -220,7 +224,6 @@ contract MIMMinterRouterStrategy is RouterStrategy {
     {
         abracadabra = IAbracadabra(_abracadabra);
         bentoBox = IBentoBoxV1(abracadabra.bentoBox());
-        mim = abracadabra.magicInternetMoney();
         maxCollatRate = _maxCollatRate;
         targetCollatRate = _targetCollatRate;
         require(abracadabra.collateral() == address(want));
@@ -232,11 +235,14 @@ contract MIMMinterRouterStrategy is RouterStrategy {
 
     function _setupStatics() internal {
         maxLoss = 1;
-        minMIMToSell = 1_000*(10**18);
+        minMIMToSell = 500*(10**18);
         bentoBox.setMasterContractApproval(address(this), abracadabra.masterContract(), true, 0,0,0);
 
-        mim.safeApprove(uniswapRouter, uint256(-1));
-        steth.safeApprove(address(crvSTETH), uint256(-1));
+        dai.safeApprove(address(uniswapRouter), type(uint256).max);
+        mim.safeApprove(address(crvMIM), type(uint256).max);
+
+        //steth.safeApprove(address(crvSTETH), uint256(-1));
+        //mim.safeApprove(address(crvMIM), uint256(-1));
     }
 
     function adjustPosition(uint256 _debtOutstanding) internal override {
@@ -260,7 +266,6 @@ contract MIMMinterRouterStrategy is RouterStrategy {
         return liquidatePosition(_amountNeeded);
     } */
 
-    event looseWant2(uint256 amountNeeded, uint256 looseWant, uint256 toWithdraw, uint256 exchangeRate, uint256 EXCHANGE_RATE_PRECISION);
     function liquidatePosition(uint256 _amountNeeded) //in collateral
         internal
         override
@@ -272,11 +277,8 @@ contract MIMMinterRouterStrategy is RouterStrategy {
             return (_amountNeeded, 0);
         }
 
-        uint256 toWithdraw = _amountNeeded.sub(wantBal);
-
         //need to convert _amountNeeded from collateral to yVault token
-        uint256 exchangeRate = abracadabra.exchangeRate();
-        _withdrawFromYVault(toWithdraw.div(exchangeRate).mul(EXCHANGE_RATE_PRECISION));
+        _withdrawFromYVault((_amountNeeded.sub(wantBal)).div(abracadabra.exchangeRate()).mul(EXCHANGE_RATE_PRECISION));
 
         repayMIM(mim.balanceOf(address(this)));
 
@@ -285,7 +287,6 @@ contract MIMMinterRouterStrategy is RouterStrategy {
             bentoBox.withdraw(mim, address(this), address(this), bbRemainingBalance, 0);
         }
         _disposeOfMIM();
-        emit looseWant2(_amountNeeded, balanceOfWant(), toWithdraw, exchangeRate, EXCHANGE_RATE_PRECISION);
 
         uint256 looseWant = balanceOfWant();
         if (_amountNeeded > looseWant) {
@@ -296,12 +297,11 @@ contract MIMMinterRouterStrategy is RouterStrategy {
         }
     }
 
-    event repayNumbers(uint256 amountFreeToWithdraw, uint256 collateralToWithdraw, uint256 part, uint256 userCollateralShare);
     function repayMIM(uint256 _amountToRepay)
         public {
+        abracadabra.accrue();//need to compute pending interest
         Rebase memory _totalBorrow = abracadabra.totalBorrow();
         uint256 owed = borrowedAmount();
-        uint256 exchangeRate = abracadabra.exchangeRate();
 
         _amountToRepay = Math.min(_amountToRepay, owed);
 
@@ -313,15 +313,14 @@ contract MIMMinterRouterStrategy is RouterStrategy {
         bentoBox.deposit(mim, address(this), address(this), _amountToDepositInBB, 0);
 
         //repay receives a part, so we need to calculate the part to repay
-        uint256 part = RebaseLibrary.toBase(_totalBorrow, _amountToRepay*99/100, false);
-        uint256 userborrowed = abracadabra.userBorrowPart(address(this));
-        abracadabra.repay(address(this), false, part);
+        uint256 part = RebaseLibrary.toBase(_totalBorrow, _amountToRepay, true);
+
+        abracadabra.repay(address(this), false, Math.min(part, abracadabra.userBorrowPart(address(this))));
 
         // we need to withdraw enough to keep our c-rate
         uint256 amountFreeToWithdraw = collateralAmount().sub(borrowedAmount().div(targetCollatRate).mul(C_RATE_PRECISION));
-        uint256 collateralToWithdraw = bentoBox.toShare(want, amountFreeToWithdraw.mul(exchangeRate).div(EXCHANGE_RATE_PRECISION), true);
+        uint256 collateralToWithdraw = bentoBox.toShare(want, amountFreeToWithdraw.mul(abracadabra.exchangeRate()).div(EXCHANGE_RATE_PRECISION), true);
 
-        emit repayNumbers(amountFreeToWithdraw, collateralToWithdraw, part, userborrowed);
         abracadabra.removeCollateral(address(this), collateralToWithdraw);
         bentoBox.withdraw(want, address(this), address(this), bentoBox.balanceOf(want, address(this)), 0);
     }
@@ -346,11 +345,7 @@ contract MIMMinterRouterStrategy is RouterStrategy {
 
     function borrowMIMToTargetCRate() public {
         addFullCollateral();
-
-        uint256 _collateral = collateralAmount();
-        uint256 _borrowedAmount = borrowedAmount();
-        uint256 toBorrow = _collateral.mul(targetCollatRate).div(C_RATE_PRECISION).sub(_borrowedAmount);
-
+        uint256 toBorrow = collateralAmount().mul(targetCollatRate).div(C_RATE_PRECISION).sub(borrowedAmount());
         borrowMIM(toBorrow);
     }
 
@@ -361,10 +356,9 @@ contract MIMMinterRouterStrategy is RouterStrategy {
 
     function collateralAmount() public view returns (uint256 _collateralAmount) {
         uint256 collateralShare = abracadabra.userCollateralShare(address(this));
-        uint256 exchangeRate = abracadabra.exchangeRate();
         _collateralAmount = bentoBox.toAmount(
             want,
-            collateralShare.mul(EXCHANGE_RATE_PRECISION).div(exchangeRate),
+            collateralShare.mul(EXCHANGE_RATE_PRECISION).div(abracadabra.exchangeRate()),
             false
         );
     }
@@ -393,15 +387,13 @@ contract MIMMinterRouterStrategy is RouterStrategy {
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 exchangeRate = abracadabra.exchangeRate();
         uint256 balanceOfMIMInBB = bentoBox.balanceOf(mim, address(this));
-        uint256 mimInVault = valueOfInvestment();
         uint256 remainingCollateral = collateralAmount().sub(borrowedAmount());
 
-        uint256 totalMIM = mimInVault.add(balanceOfMIMInBB).add(remainingCollateral);
+        uint256 totalMIM = valueOfInvestment().add(balanceOfMIMInBB).add(remainingCollateral);
 
         return
-            balanceOfWant().add(totalMIM.mul(exchangeRate).div(EXCHANGE_RATE_PRECISION));
+            balanceOfWant().add(totalMIM.mul(abracadabra.exchangeRate()).div(EXCHANGE_RATE_PRECISION));
     }
 
     function _ethToWant(uint256 _amount) internal view returns (uint256) {
@@ -409,7 +401,7 @@ contract MIMMinterRouterStrategy is RouterStrategy {
         path[0] = address(weth);
         path[1] = wantAsVault.token();
         uint256[] memory amounts =
-            IUni(uniswapRouter).getAmountsOut(_amount, path);
+            uniswapRouter.getAmountsOut(_amount, path);
 
         return _fromUnderlyingTokenToYVVault(amounts[amounts.length - 1]);
     }
@@ -418,9 +410,9 @@ contract MIMMinterRouterStrategy is RouterStrategy {
         _amount.mul(10**wantAsVault.decimals()).div(wantAsVault.pricePerShare());
     }
 
-    function _fromYVVaultToUnderlyingToken(uint256 _amount) internal view returns (uint256) {
+    /* function _fromYVVaultToUnderlyingToken(uint256 _amount) internal view returns (uint256) {
         _amount.mul(wantAsVault.pricePerShare()).div(10**wantAsVault.decimals());
-    }
+    } */
 
     function setTargetCollateralRate(uint256 _targetCollatRate) public onlyVaultManagers {
         targetCollatRate = _targetCollatRate;
@@ -428,26 +420,22 @@ contract MIMMinterRouterStrategy is RouterStrategy {
 
     receive() external payable {}
     //sell mim function
+    // due to liquidity issues, the best path is mim -> 3crv -> dai -> eth
     function _disposeOfMIM() internal virtual  {
         uint256 _mim = mim.balanceOf(address(this));
-
         if (_mim > minMIMToSell) {
-            address[] memory path = new address[](3);
-            path[0] = address(mim);
+            address[] memory path = new address[](2);
+            path[0] = address(dai);
             path[1] = address(weth);
-            path[2] = address(steth);
 
-            IUni(uniswapRouter).swapExactTokensForTokens(_mim, uint256(0), path, address(this), now);
-            uint256 stethBalance = steth.balanceOf(address(this));
+            crvMIM.exchange_underlying(int128(0), int128(1), _mim, 0);
 
-            uint256 amounts1 =  address(this).balance;
-            uint256 amounts2 = stethBalance;
+            uniswapRouter.swapExactTokensForETH(dai.balanceOf(address(this)), 0, path, address(this), now);
+            crvSTETH.add_liquidity{value: address(this).balance}([address(this).balance, 0], 0);
 
-            crvSTETH.add_liquidity{value: amounts1}([amounts1, amounts2], 0);
+            IERC20 crvSTETHLPtoken = IERC20(wantAsVault.token());
 
-            IERC20 crvSTETH1 = IERC20(wantAsVault.token());
-
-            _checkAllowance(address(wantAsVault), address(crvSTETH1), uint256(-1));
+            _checkAllowance(address(wantAsVault), address(crvSTETHLPtoken), uint256(-1));
 
             wantAsVault.deposit();
         }
