@@ -1,11 +1,12 @@
 import pytest
 from brownie import chain, Wei, reverts, Contract, ZERO_ADDRESS
 
-DUST_THRESHOLD = 10_000
+DUST_THRESHOLD = 1e13
 def move_funds(vault, dest_vault, strategy, gov, mim, mim_whale):
     print(strategy.name())
 
-    strategy.harvest({"from": gov})
+    tx = strategy.harvest({"from": gov})
+    print(tx.events['Harvested'])
     assert strategy.balanceOfWant() == 0
     assert strategy.valueOfInvestment() > 0
 
@@ -17,7 +18,8 @@ def move_funds(vault, dest_vault, strategy, gov, mim, mim_whale):
     mim.transfer(dest_vault, 2_000*(10**mim.decimals()), {"from": mim_whale})
     assert strategy.valueOfInvestment() > prev_value
 
-    strategy.harvest({"from": gov})
+    tx = strategy.harvest({"from": gov})
+    print(tx.events['Harvested'])
     chain.sleep(360 + 1)
     chain.mine(1)
     assert strategy.balanceOfWant() < DUST_THRESHOLD
@@ -30,6 +32,7 @@ def move_funds(vault, dest_vault, strategy, gov, mim, mim_whale):
 
     vault.revokeStrategy(strategy, {"from": gov})
     tx = strategy.harvest({"from": gov})
+    print(tx.events['Harvested'])
     total_gain += tx.events["Harvested"]["profit"]
     chain.sleep(360 + 1)
     chain.mine(1)
@@ -67,7 +70,7 @@ def test_original_strategy(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcr
     move_funds(vault, destination_vault, strategy, gov, mim, mim_whale)
 
 
-def test_cloned_strategy(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra):
+def test_cloned_strategy(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra, factory):
 
     vault_token = Contract(vault.token())
     bb = Contract(abracadabra.bentoBox())
@@ -86,12 +89,12 @@ def test_cloned_strategy(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvs
 
     assert mim.balanceOf(strategy) == 0
 
-    clone_tx = strategy.cloneMIMMinter(
-        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, "ClonedStrategy"
+    clone_tx = factory.cloneMIMMinter(
+        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, True, "ClonedStrategy", {"from":strategist}
     )
 
     cloned_strategy = Contract.from_abi(
-        "Strategy", clone_tx.events["FullCloned"]["clone"], strategy.abi
+        "Strategy", clone_tx.events["Cloned"]["clone"], strategy.abi
     )
 
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
@@ -113,31 +116,15 @@ def test_cloned_strategy(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvs
     )
 
 
-def test_clone_of_clone(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra):
 
-    clone_tx = strategy.cloneMIMMinter(
-        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, "ClonedStrategy"
+def test_double_initialize(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra, factory):
+
+    clone_tx = factory.cloneMIMMinter(
+        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, True, "ClonedStrategy", {"from":strategist}
     )
 
     cloned_strategy = Contract.from_abi(
-        "Strategy", clone_tx.events["FullCloned"]["clone"], strategy.abi
-    )
-
-    # should not clone a clone
-    with reverts():
-        cloned_strategy.cloneMIMMinter(
-            vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, "ClonedStrategy", {"from":strategist}
-        )
-
-
-def test_double_initialize(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra):
-
-    clone_tx = strategy.cloneMIMMinter(
-        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, "ClonedStrategy"
-    )
-
-    cloned_strategy = Contract.from_abi(
-        "Strategy", clone_tx.events["FullCloned"]["clone"], strategy.abi
+        "Strategy", clone_tx.events["Cloned"]["clone"], strategy.abi
     )
 
     # should not be able to call initialize twice

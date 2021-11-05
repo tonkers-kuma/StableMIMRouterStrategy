@@ -53,7 +53,6 @@ def test_mint_mim(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, v
     vault.revokeStrategy(strategy, {"from": gov})
 
     tx = strategy.harvest({"from": gov})
-    info(strategy, mim, bb, steth, vault_token, vault, destination_vault)
     print(tx.events['Harvested'])
 
     total_gain += tx.events["Harvested"]["profit"]

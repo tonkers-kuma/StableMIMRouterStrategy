@@ -3,14 +3,14 @@ from brownie import chain, Wei, reverts, Contract
 from eth_abi import encode_single
 
 
-def test_prepare_migration(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra):
+def test_prepare_migration(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, strategist, rewards, keeper, abracadabra, factory):
 
-    clone_tx = strategy.cloneMIMMinter(
-        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, "ClonedStrategy"
+    clone_tx = factory.cloneMIMMinter(
+        vault, strategist, rewards, keeper, destination_vault, abracadabra, 75_000, 60_000, True, "ClonedStrategy", {"from":strategist}
     )
 
     cloned_strategy = Contract.from_abi(
-        "Strategy", clone_tx.events["FullCloned"]["clone"], strategy.abi
+        "Strategy", clone_tx.events["Cloned"]["clone"], strategy.abi
     )
 
     vault_token = Contract(vault.token())

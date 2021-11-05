@@ -153,15 +153,14 @@ contract AbracadabraBorrower is IFlashBorrower {
     IBentoBoxV1 private bentoBox;
     uint256 public targetCollatRate;
     uint256 private maxCollatRate;
-    uint256 private minMIMToSell;
+    uint256 internal minMIMToSell;
     bool private underlying_is_lp;
     IERC20 private collateral;
     VaultAPI internal collateralAsVault;
 
-
     uint256 private constant C_RATE_PRECISION = 1e5;
     uint256 private constant EXCHANGE_RATE_PRECISION = 1e18;
-    uint256 private constant DUST_THRESHOLD = 10_000;
+    uint256 internal constant DUST_THRESHOLD = 10_000;
 
     IWETH public constant weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 private constant dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
@@ -219,7 +218,6 @@ contract AbracadabraBorrower is IFlashBorrower {
     }
 
     /*********************** Borrow and Repay Functions ***********************/
-
     function repayMIM(uint256 _amountToRepay)
         internal {
         abracadabra.accrue();//need to compute pending interest
@@ -245,11 +243,11 @@ contract AbracadabraBorrower is IFlashBorrower {
         abracadabra.repay(address(this), false, Math.min(part, abracadabra.userBorrowPart(address(this))));
 
         // we need to withdraw enough to keep our c-rate
-        uint256 _collatRate = targetCollatRate == 0 ? maxCollatRate:targetCollatRate;
+        uint256 _collatRate = targetCollatRate == 0 ? (maxCollatRate-500):targetCollatRate;
 
-        uint256 _neededCollateralAmount = borrowedAmount().div(_collatRate-200).mul(C_RATE_PRECISION);
+        uint256 _neededCollateralAmount = borrowedAmount().div(_collatRate).mul(C_RATE_PRECISION);
         uint256 _collateralAmount = collateralAmount();
-        uint256 amountFreeToWithdraw = _collateralAmount >= _neededCollateralAmount ? _collateralAmount.sub(_neededCollateralAmount):0;
+        uint256 amountFreeToWithdraw = (_collateralAmount >= _neededCollateralAmount) ? (_collateralAmount.sub(_neededCollateralAmount)):0;
         uint256 collateralToWithdraw = bentoBox.toShare(collateral, mimToCollateral(amountFreeToWithdraw), true);
 
         if(collateralToWithdraw > 0) {
@@ -307,15 +305,15 @@ contract AbracadabraBorrower is IFlashBorrower {
         return collateral.balanceOf(address(this));
     }
 
-    function balanceOfMIM() public view returns (uint256){
+    function balanceOfMIM() internal view returns (uint256){
         return mim.balanceOf(address(this));
     }
 
-    function balanceOfMIMInBentoBox() public view returns (uint256){
+    function balanceOfMIMInBentoBox() internal view returns (uint256){
         return bentoBox.balanceOf(mim, address(this));
     }
 
-    function balanceOfCollateralInBentoBox() public view returns (uint256){
+    function balanceOfCollateralInBentoBox() internal view returns (uint256){
         return bentoBox.balanceOf(collateral, address(this));
     }
 

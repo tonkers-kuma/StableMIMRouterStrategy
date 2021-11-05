@@ -131,23 +131,31 @@ def vault(pm, gov, rewards, guardian, management, token):
     vault.setManagement(management, {"from": gov})
     yield vault
 
+@pytest.fixture
+def factory(strategist,
+    vault,
+    MIMMinterRouterFactory,
+    destination_vault,
+    abracadabra
+):
+    factory = strategist.deploy(MIMMinterRouterFactory, vault, destination_vault, "yvcrvsteth-MIM-Minter",
+        abracadabra, 75_000, 65_000, True)
+
+    yield factory
 
 @pytest.fixture
 def strategy(
     strategist,
     keeper,
     vault,
-    MIMMinterRouterStrategy,
     gov,
     health_check,
-    destination_vault,
-    abracadabra
+    factory
 ):
-    strategy = strategist.deploy(
-        MIMMinterRouterStrategy, vault, destination_vault, "yvcrvsteth-MIM-Minter",
-        abracadabra, 75_000, 65_000, True
-    )
-    strategy.setKeeper(keeper)
+
+    strategy = Contract(factory.original())
+
+    strategy.setKeeper(keeper, {"from": gov})
 
     for i in range(0, 20):
         strat_address = vault.withdrawalQueue(i)
