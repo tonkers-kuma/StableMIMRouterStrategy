@@ -2,6 +2,7 @@ import pytest
 from brownie import Contract, ZERO_ADDRESS, Wei, chain, reverts
 
 DUST_THRESHOLD = 10_000
+# TODO: Important: Need to add tests for debt_change (both raise and decrease and with profit)
 def test_profit_emergency(strategy, mim, gov, mim_whale, yvcrvsteth_whale, yvcrvsteth, vault, destination_vault, abracadabra):
     vault_token = Contract(vault.token())
 

@@ -103,6 +103,8 @@ interface IRouter {
 }
 
 interface IAbracadabra {
+    // TODO: function COLLATERIZATION_RATE() external view returns (uint);
+    // TODO: add view for bentoBox(), masterContract()
     function bentoBox() external returns (IBentoBoxV1);
     function masterContract() external returns (address);
     function addCollateral(address to, bool skim, uint256 share) external;
@@ -177,7 +179,10 @@ contract AbracadabraBorrower is IFlashBorrower {
     {
         abracadabra = IAbracadabra(_abracadabra);
         bentoBox = IBentoBoxV1(abracadabra.bentoBox());
+        // TODO: maxCollatRate = abracadabra.COLLATERIZATION_RATE(); instead of initializing this yourself. Can be removed from constructor
         maxCollatRate = _maxCollatRate;
+        // TODO: Should add a require(targetCollatRate < maxCollatRate);
+        // TODO: Also recommend adding an additional param
         targetCollatRate = _targetCollatRate;
         require(targetCollatRate < maxCollatRate);
         collateral = IERC20(abracadabra.collateral());
@@ -270,6 +275,9 @@ contract AbracadabraBorrower is IFlashBorrower {
 
     function borrowMIMToTargetCRate() internal {
         uint256 _balanceOfCollateral = balanceOfCollateral();
+        // TODO: I think _balanceOfCollateral != shares?
+        // TODO: (uint256 amountOut, uint256 sharesOut) = bentoBox.deposit(collateral, address(this), address(this), _balanceOfCollateral, 0);
+        // TODO: abracadabra.addCollateral(address(this), false, sharesOut);
         bentoBox.deposit(collateral, address(this), address(this), _balanceOfCollateral, 0);
         abracadabra.addCollateral(address(this), false, _balanceOfCollateral);
 

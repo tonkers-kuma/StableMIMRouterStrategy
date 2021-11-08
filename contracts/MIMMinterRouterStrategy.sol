@@ -4,16 +4,17 @@ pragma experimental ABIEncoderV2;
 
 import {BaseStrategy} from "@yearnvaults/contracts/BaseStrategy.sol";
 import {
-    SafeERC20,
-    SafeMath,
-    IERC20,
-    Address
+SafeERC20,
+SafeMath,
+IERC20,
+Address
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "./RouterStrategy.sol";
 import "./AbracadabraBorrower.sol";
 
-
+// TODO: Note: It seems like this contract isn't benefiting much from inheriting from RouterStrategy
+// TODO: in fact, some accounting like delegatedAssets would be better off here where it has visibility to mimToCollat()
 contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
     using SafeERC20 for IERC20;
     using Address for address;
@@ -56,18 +57,23 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
     }
 
     function _initializeMIMMinterRouter(address _abracadabra, uint256 _maxCollatRate, uint256 _targetCollatRate, bool _underlying_is_lp)
-        internal
+    internal
     {
         _initializeAbracadabraBorrower(_abracadabra, _maxCollatRate, _targetCollatRate, _underlying_is_lp);
 
         maxLoss = 1;
     }
 
+    // TODO: Critical: Need to override tendTrigger to check for state of collateral.
+    // TODO: Debt strategies heavily rely on keepers to maintain a healthy ratio.
+
     function adjustPosition(uint256 _debtOutstanding) internal override {
         if (emergencyExit) {
             return;
         }
 
+        // TODO: Critical: Use currentCRate().
+        // TODO: Only borrow more if overcollateralized. Return borrowed if undercollateralized, otherwise it can get liquidated
         uint256 balance = balanceOfWant();
         if (balance > 0) {
             _checkAllowance(address(yVault), address(mim), balance);
@@ -80,10 +86,11 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
     }
 
     function liquidatePosition(uint256 _amountNeeded) //in collateral
-        internal
-        override
-        returns (uint256 _liquidatedAmount, uint256 _loss)
+    internal
+    override
+    returns (uint256 _liquidatedAmount, uint256 _loss)
     {
+
         uint256 wantBal = balanceOfWant();
 
         if (wantBal >= _amountNeeded) {
@@ -99,7 +106,7 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
         }
 
         uint256 bbRemainingBalance = balanceOfMIMInBentoBox();
-        if(bbRemainingBalance > minMIMToSell) {
+        if (bbRemainingBalance > minMIMToSell) {
             removeMIMFromBentoBox();
         }
 
@@ -116,9 +123,9 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
     }
 
     function liquidateAllPositions()
-        internal
-        override
-        returns (uint256 _amountFreed)
+    internal
+    override
+    returns (uint256 _amountFreed)
     {
         liquidatePosition(estimatedTotalAssets());
 
@@ -133,7 +140,7 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
         uint256 totalMIM = valueOfInvestment().add(balanceOfMIMInBB).add(remainingCollateral);
 
         return
-            balanceOfWant().add(mimToCollateral(totalMIM));
+        balanceOfWant().add(mimToCollateral(totalMIM));
     }
 
     function prepareMigration(address _newStrategy) internal override {
@@ -149,7 +156,7 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
                 _balanceOfMIM
             );
         }
-        if(balanceOfMIMInBentoBox() > 0) {
+        if (balanceOfMIMInBentoBox() > 0) {
             transferAllBentoBalance(_newStrategy);
         }
         super.prepareMigration(_newStrategy);
@@ -160,13 +167,14 @@ contract MIMMinterRouterStrategy is RouterStrategy, AbracadabraBorrower {
         path[0] = address(weth);
         path[1] = collateralAsVault.token();
         uint256[] memory amounts =
-            uniswapRouter.getAmountsOut(_amount, path);
+        uniswapRouter.getAmountsOut(_amount, path);
 
         return _fromUnderlyingTokenToYVVault(amounts[amounts.length - 1]);
     }
 
     function _fromUnderlyingTokenToYVVault(uint256 _amount) internal view returns (uint256) {
-        _amount.mul(10**collateralAsVault.decimals()).div(collateralAsVault.pricePerShare());
+        // TODO: missing return
+        _amount.mul(10 ** collateralAsVault.decimals()).div(collateralAsVault.pricePerShare());
     }
 
     /*********************** Setters Functions ***********************/

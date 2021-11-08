@@ -34,7 +34,7 @@ contract RouterStrategy is BaseStrategy {
     using SafeMath for uint256;
 
     string internal strategyName;
-    IVault public yVault;
+    IVault public yVault; // TODO: Reccommended rename delegatedVault instead
     uint256 public maxLoss;
     bool internal isOriginal = true;
 
@@ -111,10 +111,13 @@ contract RouterStrategy is BaseStrategy {
     }
 
     function estimatedTotalAssets() public view virtual override returns (uint256) {
+        // TODO: Incorrect units? This is adding yvcrvsteth + mim.
         return balanceOfWant().add(valueOfInvestment());
     }
 
     function delegatedAssets() external view override returns (uint256) {
+        // TODO: Should be the total amount of mim converted to want.
+        // TODO: i.e. debt = $100m, $100m is collateralized, $65m mim is borrowed. This function should return 65m
         return vault.strategies(address(this)).totalDebt;
     }
 
@@ -278,6 +281,7 @@ contract RouterStrategy is BaseStrategy {
         return amount.mul(10**yVault.decimals()).div(yVault.pricePerShare());
     }
 
+    // Denominated in mim
     function valueOfInvestment() public view returns (uint256) {
         return
             yVault.balanceOf(address(this)).mul(yVault.pricePerShare()).div(
